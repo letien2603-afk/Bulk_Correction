@@ -43,10 +43,10 @@ st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
 st.title("Chương Trình Xử Lý Invoice (COR/REV)")
 st.write("Vui lòng tải lên 3 tệp dữ liệu cần thiết bên dưới để hệ thống xử lý.")
 
-# Upload Files
-correction_file = st.file_uploader("1. Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls'])
-atf_file = st.file_uploader("2. Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls'])
-postal_ref_file = st.file_uploader("3. Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls'])
+# Upload Files (ĐÃ BỔ SUNG ĐỊNH DẠNG xlsb)
+correction_file = st.file_uploader("1. Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("2. Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+postal_ref_file = st.file_uploader("3. Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
 
 if st.button("Bắt Đầu Xử Lý", type="primary"):
     if not correction_file or not atf_file or not postal_ref_file:
@@ -135,15 +135,11 @@ if st.button("Bắt Đầu Xử Lý", type="primary"):
                         df_rev.to_excel(writer, sheet_name='REV', index=False)
                         df_upload.to_excel(writer, sheet_name='Upload', index=False)
                     
-                    # Đưa con trỏ bộ nhớ về đầu để chuẩn bị tải xuống
                     output_buffer.seek(0)
                     
                     st.success("✅ Xử lý thành công! Nhấn nút bên dưới để tải file kết quả.")
-                    
-                    # Hiện thống kê log nhanh
                     st.info(f"📊 Thống kê nhanh: Đã xử lý {len(latest_invoices_df)} hóa đơn hợp lệ.")
                     
-                    # Nút tải file
                     st.download_button(
                         label="📥 Tải xuống Matched_Latest_Invoices_Result.xlsx",
                         data=output_buffer,
