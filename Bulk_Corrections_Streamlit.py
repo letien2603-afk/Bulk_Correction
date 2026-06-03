@@ -40,20 +40,34 @@ def update_suffix(val, target_suffix):
 
 # --- GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
-st.title("Bulk Corrections-Eric Hayes")
-st.write("Upload 3 required documents for data processing")
+st.title("Chương Trình Xử Lý Invoice (COR/REV)")
 
-# Upload Files 
-correction_file = st.file_uploader("1. Eric Hayes' file", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("2. Most recent ATF", type=['xlsx', 'xls', 'xlsb'])
-postal_ref_file = st.file_uploader("3. Postal Codes Ref", type=['xlsx', 'xls', 'xlsb'])
+# --- 1. NHẬP THÔNG TIN CASE ---
+st.subheader("1. Thông tin Case (Bắt buộc)")
+col1, col2 = st.columns(2)
+with col1:
+    case_number = st.text_input("Nhập Case Number", placeholder="VD: 2605-10535218")
+with col2:
+    impacted_month = st.text_input("Nhập Impacted Month", placeholder="VD: April")
 
-if st.button("Start data processing", type="primary"):
-    if not correction_file or not atf_file or not postal_ref_file:
-        st.warning("⚠️ Please upload 3 required documents before continue!")
+# --- 2. UPLOAD TỆP DỮ LIỆU ---
+st.subheader("2. Tải lên dữ liệu")
+st.write("Vui lòng tải lên 3 tệp dữ liệu cần thiết bên dưới để hệ thống xử lý.")
+
+correction_file = st.file_uploader("Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+postal_ref_file = st.file_uploader("Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+
+# --- 3. XỬ LÝ DỮ LIỆU ---
+if st.button("Bắt Đầu Xử Lý", type="primary"):
+    # Kiểm tra người dùng đã nhập đủ Case Number và Impacted Month chưa
+    if not case_number or not impacted_month:
+        st.warning("⚠️ Vui lòng nhập đầy đủ 'Case Number' và 'Impacted Month' trước khi xử lý!")
+    elif not correction_file or not atf_file or not postal_ref_file:
+        st.warning("⚠️ Vui lòng tải lên đầy đủ cả 3 tệp trước khi xử lý!")
     else:
-        # --- KHỞI TẠO THANH TIẾN TRÌNH (PROGRESS BAR) ---
-        progress_text = "Start data processing..."
+        # Khởi tạo thanh tiến trình
+        progress_text = "Khởi động quy trình..."
         progress_bar = st.progress(0, text=progress_text)
         
         try:
@@ -87,7 +101,7 @@ if st.button("Start data processing", type="primary"):
             postal_mapping = dict(zip(first_col, second_col))
 
             # --- BƯỚC 3: XỬ LÝ ATF FILE VÀ LỌC INVOICE (65%) ---
-            progress_bar.progress(65, text="Data is being processed...")
+            progress_bar.progress(65, text="Đang xử lý 'ATF File' và trích xuất hóa đơn mới nhất...")
             
             df_atf = pd.read_excel(atf_file)
 
@@ -104,7 +118,7 @@ if st.button("Start data processing", type="primary"):
                 df_rev = latest_invoices_df.copy()
                 
                 # --- BƯỚC 4: UPDATE DATA COR, REV, UPLOAD (85%) ---
-                progress_bar.progress(85, text="Computing and creating upload file...")
+                progress_bar.progress(85, text="Đang tính toán các chỉ số và tạo dữ liệu cho COR, REV, Upload...")
                 
                 # UPDATE SHEET "COR"
                 if 'Transaction Number' in df_cor.columns:
@@ -117,6 +131,10 @@ if st.button("Start data processing", type="primary"):
                     mapped_reps = df_cor['Original Invoice'].map(rep_mapping)
                     mapped_postals = mapped_reps.dropna().map(postal_mapping)
                     df_cor['Other Postal Code'] = mapped_postals.combine_first(df_cor['Other Postal Code'])
+                
+                # CẬP NHẬT CỘT COMMENTS TRONG SHEET COR VỚI INPUT CỦA USER
+                comment_value = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
+                df_cor['Comments'] = comment_value
 
                 # UPDATE SHEET "REV"
                 if 'Transaction Number' in df_rev.columns:
@@ -143,7 +161,6 @@ if st.button("Start data processing", type="primary"):
                 
                 output_buffer = BytesIO()
                 with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-                    # ĐÃ XÓA SHEET1 Ở ĐÂY - CHỈ LƯU 3 SHEET BÊN DƯỚI
                     df_cor.to_excel(writer, sheet_name='COR', index=False)
                     df_rev.to_excel(writer, sheet_name='REV', index=False)
                     df_upload.to_excel(writer, sheet_name='Upload', index=False)
@@ -151,22 +168,23 @@ if st.button("Start data processing", type="primary"):
                 output_buffer.seek(0)
                 
                 # Hoàn tất tiến trình
-                progress_bar.progress(100, text="Data Processing Completed!")
+                progress_bar.progress(100, text="Hoàn tất quy trình xử lý!")
                 
-                st.success("✅ Click Download button below for the Correction file.")
+                st.success("✅ Xử lý thành công! Nhấn nút bên dưới để tải file kết quả.")
+                st.info(f"📊 Thống kê nhanh: Đã xử lý {len(latest_invoices_df)} hóa đơn hợp lệ.")
                 
                 st.download_button(
-                    label="📥 Download",
+                    label="📥 Tải xuống Matched_Latest_Invoices_Result.xlsx",
                     data=output_buffer,
-                    file_name="Correction file.xlsx",
+                    file_name="Matched_Latest_Invoices_Result.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary"
                 )
 
             else:
-                st.error("❌ Error: Can't fine the Invoice Number column in ATF file")
-                progress_bar.empty() # Xóa thanh tiến trình nếu có lỗi
+                st.error("❌ Lỗi: Không tìm thấy cột 'Invoice Number' trong file ATF.")
+                progress_bar.empty()
 
         except Exception as e:
-            st.error(f"❌ Data processing error: {e}")
-            progress_bar.empty() # Xóa thanh tiến trình nếu có lỗi
+            st.error(f"❌ Đã xảy ra lỗi trong quá trình xử lý: {e}")
+            progress_bar.empty()
