@@ -145,6 +145,10 @@ if st.button("Data Processing", type="primary"):
                     df_rev['Transaction Type'] = 'MANUAL_ADJ'
                 if 'Invoice Number' in df_rev.columns:
                     df_rev['Invoice Number'] = df_rev['Invoice Number'].apply(lambda x: update_suffix(x, 'REV'))
+				
+				# Cập nhật Comments dựa trên Input
+                comment_value = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
+                df_rev['Comments'] = comment_value
                     
                 cols_to_invert = ['Transaction Amount', 'EUR Value', 'CAD Value', 'GBP Value', 'Native Currency', 'AUD Value']
                 for col in cols_to_invert:
