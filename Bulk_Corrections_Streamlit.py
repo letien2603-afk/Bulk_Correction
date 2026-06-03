@@ -3,9 +3,8 @@ import pandas as pd
 import re
 from io import BytesIO
 
-# --- HÀM MỚI: XỬ LÝ CHUỖI SIÊU TỐC (VECTORIZED) ---
+# --- HÀM XỬ LÝ CHUỖI SIÊU TỐC (VECTORIZED) ---
 def clean_invoice_series(series):
-    """ Dùng sức mạnh xử lý mảng của Pandas thay vì chạy vòng lặp từng dòng """
     s = series.astype(str).str.strip()
     s = s.str.replace(r'\.0$', '', regex=True)
     base = s.str.replace(r'[- ]*(COR|REV)\d*$', '', regex=True, flags=re.IGNORECASE)
@@ -39,6 +38,13 @@ def update_suffix(val, target_suffix):
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
 st.title("Bulk Corrections")
 
+# --- KHỞI TẠO BỘ NHỚ TRẠNG THÁI (SESSION STATE) ---
+if 'processing_done' not in st.session_state:
+    st.session_state.processing_done = False
+    st.session_state.excel_data = None
+    st.session_state.csv_data = None
+    st.session_state.success_msg = ""
+
 # --- 1. NHẬP THÔNG TIN CASE ---
 st.subheader("1. Required Information")
 col1, col2 = st.columns(2)
@@ -54,18 +60,17 @@ atf_file = st.file_uploader("ATF File", type=['xlsx', 'xls', 'xlsb'])
 postal_ref_file = st.file_uploader("Postal Codes Ref File", type=['xlsx', 'xls', 'xlsb'])
 
 # --- 3. XỬ LÝ DỮ LIỆU ---
-if st.button("Start Data Processing", type="primary"):
+if st.button("Start Processing", type="primary"):
     if not case_number or not impacted_month:
         st.warning("⚠️ You must enter a Case Number and Impacted Month!")
     elif not correction_file or not atf_file or not postal_ref_file:
         st.warning("⚠️ You must upload 3 required documents!")
     else:
-        progress_bar = st.progress(0, text="Start Analyzing...")
+        progress_bar = st.progress(0, text="Start Data Processing...")
         
         try:
-            # --- BƯỚC 1: XỬ LÝ CORRECTION FILE (20%) ---
-            progress_bar.progress(20, text="Upload data to RAM...")
-            
+            # Bước 1
+            progress_bar.progress(20, text="Uploading sheets to RAM...")
             all_sheets = pd.read_excel(correction_file, sheet_name=None)
             corr_original_invs = set()
             rep_mapping = {}
@@ -78,27 +83,23 @@ if st.button("Start Data Processing", type="primary"):
                     
                 if 'Invoice Number' in df_sheet.columns:
                     cleaned_series = clean_invoice_series(df_sheet['Invoice Number']).dropna()
-                    
                     for orig_inv in cleaned_series:
                         corr_original_invs.add(orig_inv)
                         rep_mapping[orig_inv] = sales_rep.upper()
 
-            # --- BƯỚC 2: ĐỌC POSTAL CODES REF FILE (40%) ---
-            progress_bar.progress(40, text="Comparing against Postal Code Ref file...")
-            
+            # Bước 2
+            progress_bar.progress(40, text="Reading Postal Codes Ref...")
             df_postal = pd.read_excel(postal_ref_file)
             first_col = df_postal.iloc[:, 0].astype(str).str.strip().str.upper()
             second_col = df_postal.iloc[:, 1].astype(str).str.strip()
             postal_mapping = dict(zip(first_col, second_col))
 
-            # --- BƯỚC 3: XỬ LÝ ATF FILE VÀ LỌC INVOICE (65%) ---
-            progress_bar.progress(65, text="Scanning through ATF...")
-            
+            # Bước 3
+            progress_bar.progress(65, text="Scanning ATF file...")
             df_atf = pd.read_excel(atf_file)
 
             if 'Invoice Number' in df_atf.columns:
                 df_atf['Original Invoice'] = clean_invoice_series(df_atf['Invoice Number'])
-                
                 matched_atf = df_atf[df_atf['Original Invoice'].isin(corr_original_invs)].copy()
                 
                 matched_atf['Priority_Rank'] = matched_atf['Invoice Number'].apply(get_invoice_rank)
@@ -109,10 +110,9 @@ if st.button("Start Data Processing", type="primary"):
                 df_cor = latest_invoices_df.copy()
                 df_rev = latest_invoices_df.copy()
                 
-                # --- BƯỚC 4: UPDATE DATA COR, REV, UPLOAD (85%) ---
-                progress_bar.progress(85, text="Creating the upload file...")
+                # Bước 4
+                progress_bar.progress(85, text="Creating the correction file...")
                 
-                # UPDATE COR
                 if 'Transaction Number' in df_cor.columns:
                     df_cor['Transaction Number'] = df_cor['Transaction Number'].apply(lambda x: update_suffix(x, 'COR')) 
                 if 'Transaction Type' in df_cor.columns:
@@ -124,11 +124,8 @@ if st.button("Start Data Processing", type="primary"):
                     mapped_postals = mapped_reps.dropna().map(postal_mapping)
                     df_cor['Other Postal Code'] = mapped_postals.combine_first(df_cor['Other Postal Code'])
                 
-                # Cập nhật Comments
-                comment_value = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
-                df_cor['Comments'] = comment_value
+                df_cor['Comments'] = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
 
-                # UPDATE REV
                 if 'Transaction Number' in df_rev.columns:
                     df_rev['Transaction Number'] = df_rev['Transaction Number'].apply(lambda x: update_suffix(x, 'REV'))
                 if 'Transaction Type' in df_rev.columns:
@@ -143,51 +140,50 @@ if st.button("Start Data Processing", type="primary"):
 
                 df_cor = df_cor.drop(columns=['Original Invoice'])
                 df_rev = df_rev.drop(columns=['Original Invoice'])
-
-                # TẠO DATAFRAME TỔNG HỢP (UPLOAD)
                 df_upload = pd.concat([df_cor, df_rev], ignore_index=True)
 
-                # --- BƯỚC 5: TẠO FILE EXCEL VÀ CSV (100%) ---
-                progress_bar.progress(95, text="Packing 2 output files...")
+                # Bước 5: LƯU VÀO BỘ NHỚ STATE
+                progress_bar.progress(95, text="Preparing the correction file...")
                 
-                # 1. Khởi tạo file Excel (CHỈ LƯU 1 SHEET UPLOAD)
                 excel_buffer = BytesIO()
                 with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                     df_upload.to_excel(writer, sheet_name='Upload', index=False)
-                excel_buffer.seek(0)
                 
-                # 2. Khởi tạo file CSV
-                csv_data = df_upload.to_csv(index=False).encode('utf-8')
+                # Lưu file dưới dạng bộ nhớ đệm (Bytes) vào Session State
+                st.session_state.excel_data = excel_buffer.getvalue()
+                st.session_state.csv_data = df_upload.to_csv(index=False).encode('utf-8')
+                st.session_state.success_msg = f"✅ Xử lý thành công! Đã trích xuất {len(latest_invoices_df)} hóa đơn hợp lệ (Tổng cộng {len(df_upload)} dòng)."
+                st.session_state.processing_done = True
                 
-                progress_bar.progress(100, text="Process is completed!")
-                
-                st.success("✅ Click Download button below for the output files.")
-
-                # --- HIỂN THỊ 2 NÚT DOWNLOAD CẠNH NHAU ---
-                col_btn1, col_btn2 = st.columns(2)
-                
-                with col_btn1:
-                    st.download_button(
-                        label="📥 Download Corrections.xlsx file",
-                        data=excel_buffer,
-                        file_name="Corrections.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="primary"
-                    )
-                    
-                with col_btn2:
-                    st.download_button(
-                        label="📥 Download Corrections.csv file",
-                        data=csv_data,
-                        file_name="Corrections.csv",
-                        mime="text/csv",
-                        type="primary"
-                    )
+                progress_bar.progress(100, text="Data Processing is completed!")
 
             else:
-                st.error("❌ Error: Can't find the Invoice Number column in ATF.")
+                st.error("❌ Error: Can't find the Invoice Number column in file ATF.")
                 progress_bar.empty()
 
         except Exception as e:
-            st.error(f"❌ Data Processing error: {e}")
+            st.error(f"❌ Data Processing Error: {e}")
             progress_bar.empty()
+
+# --- 4. HIỂN THỊ NÚT TẢI XUỐNG DỰA VÀO SESSION STATE ---
+if st.session_state.processing_done:
+    st.success(st.session_state.success_msg)
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        st.download_button(
+            label="📥 Download Correction.xlsx",
+            data=st.session_state.excel_data,
+            file_name="Correction.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
+        )
+        
+    with col_btn2:
+        st.download_button(
+            label="📥 Download Correction.CSV",
+            data=st.session_state.csv_data,
+            file_name="Correction.csv",
+            mime="text/csv",
+            type="primary"
+        )
