@@ -3,17 +3,19 @@ import pandas as pd
 import re
 from io import BytesIO
 
-# --- CÁC HÀM HỖ TRỢ XỬ LÝ CHUỖI ---
-def clean_invoice(inv):
-    """ Xóa hậu tố và đồng bộ số 0 ở đầu """
-    if pd.isna(inv): return inv
-    inv_str = str(inv).strip()
-    if inv_str.endswith('.0'): 
-        inv_str = inv_str[:-2]
-        
-    base = re.sub(r'[- ]*(COR|REV)\d*$', '', inv_str, flags=re.IGNORECASE)
-    cleaned = base.lstrip('0')
-    return cleaned if cleaned else base
+# --- HÀM MỚI: XỬ LÝ CHUỖI SIÊU TỐC (VECTORIZED) ---
+def clean_invoice_series(series):
+    """ Dùng sức mạnh xử lý mảng của Pandas thay vì chạy vòng lặp từng dòng """
+    # Chuyển về chuỗi và xóa khoảng trắng
+    s = series.astype(str).str.strip()
+    # Xóa đuôi .0
+    s = s.str.replace(r'\.0$', '', regex=True)
+    # Xóa hậu tố COR/REV (lưu lại base để dùng nếu lstrip ra chuỗi rỗng)
+    base = s.str.replace(r'[- ]*(COR|REV)\d*$', '', regex=True, flags=re.IGNORECASE)
+    # Xóa số 0 ở đầu
+    cleaned = base.str.lstrip('0')
+    # Nếu xóa 0 xong bị rỗng, lấy lại base. Đổi 'nan' thành NA thực thụ để drop
+    return cleaned.where(cleaned != '', base).replace('nan', pd.NA)
 
 def get_invoice_rank(inv):
     if pd.isna(inv): return -1
@@ -40,60 +42,57 @@ def update_suffix(val, target_suffix):
 
 # --- GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
-st.title("Bulk Corrections - Eric Hayes")
+st.title("Chương Trình Xử Lý Invoice (Bản Tối Ưu Tốc Độ)")
 
 # --- 1. NHẬP THÔNG TIN CASE ---
-st.subheader("1. Case Number and Impacted Month")
+st.subheader("1. Thông tin Case (Bắt buộc)")
 col1, col2 = st.columns(2)
 with col1:
-    case_number = st.text_input("Case Number", placeholder="VD: 2605-10535218")
+    case_number = st.text_input("Nhập Case Number", placeholder="VD: 2605-10535218")
 with col2:
-    impacted_month = st.text_input("Impacted Month", placeholder="VD: April")
+    impacted_month = st.text_input("Nhập Impacted Month", placeholder="VD: April")
 
 # --- 2. UPLOAD TỆP DỮ LIỆU ---
-st.subheader("2. Upload section")
-st.write("Upload 3 required documents.")
-
-correction_file = st.file_uploader("Eric Hayes' file", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("ATF file", type=['xlsx', 'xls', 'xlsb'])
-postal_ref_file = st.file_uploader("Postal Code Ref file", type=['xlsx', 'xls', 'xlsb'])
+st.subheader("2. Tải lên dữ liệu")
+correction_file = st.file_uploader("Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+postal_ref_file = st.file_uploader("Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
 
 # --- 3. XỬ LÝ DỮ LIỆU ---
-if st.button("Start to process data", type="primary"):
-    # Kiểm tra người dùng đã nhập đủ Case Number và Impacted Month chưa
+if st.button("Bắt Đầu Xử Lý (Fast Mode)", type="primary"):
     if not case_number or not impacted_month:
-        st.warning("⚠️ You must enter a case number and Impacted Month!")
+        st.warning("⚠️ Vui lòng nhập đầy đủ 'Case Number' và 'Impacted Month'!")
     elif not correction_file or not atf_file or not postal_ref_file:
-        st.warning("⚠️ You must upload 3 required documents!")
+        st.warning("⚠️ Vui lòng tải lên đầy đủ cả 3 tệp trước khi xử lý!")
     else:
-        # Khởi tạo thanh tiến trình
-        progress_text = "Start processing..."
-        progress_bar = st.progress(0, text=progress_text)
+        progress_bar = st.progress(0, text="Khởi động quy trình siêu tốc...")
         
         try:
             # --- BƯỚC 1: XỬ LÝ CORRECTION FILE (20%) ---
-            progress_bar.progress(20, text="Analyzing 'Requested Correction File'...")
+            progress_bar.progress(20, text="Đang nạp toàn bộ sheet vào RAM...")
             
-            corr_xls = pd.ExcelFile(correction_file)
+            # TỐI ƯU 1: Đọc sheet_name=None để load 1 lần duy nhất thay vì I/O nhiều lần
+            all_sheets = pd.read_excel(correction_file, sheet_name=None)
             corr_original_invs = set()
             rep_mapping = {}
             ignore_sheets = ['Participant Earning Summary MAR']
 
-            for sheet_name in corr_xls.sheet_names:
+            for sheet_name, df_sheet in all_sheets.items():
                 sales_rep = str(sheet_name).strip()
                 if sales_rep.upper() in [x.upper() for x in ignore_sheets]:
                     continue
                     
-                df_sheet = pd.read_excel(corr_xls, sheet_name=sheet_name)
                 if 'Invoice Number' in df_sheet.columns:
-                    for _, row in df_sheet.iterrows():
-                        orig_inv = clean_invoice(row['Invoice Number'])
-                        if pd.notna(orig_inv) and str(orig_inv).strip() != 'nan':
-                            corr_original_invs.add(orig_inv)
-                            rep_mapping[orig_inv] = sales_rep.upper()
+                    # TỐI ƯU 2: Dùng Vectorization thay cho vòng lặp apply
+                    cleaned_series = clean_invoice_series(df_sheet['Invoice Number']).dropna()
+                    
+                    # Ánh xạ nhanh vào Dictionary
+                    for orig_inv in cleaned_series:
+                        corr_original_invs.add(orig_inv)
+                        rep_mapping[orig_inv] = sales_rep.upper()
 
             # --- BƯỚC 2: ĐỌC POSTAL CODES REF FILE (40%) ---
-            progress_bar.progress(40, text="Đang ánh xạ mã bưu điện từ 'Postal Codes Ref File'...")
+            progress_bar.progress(40, text="Đang ánh xạ mã bưu điện...")
             
             df_postal = pd.read_excel(postal_ref_file)
             first_col = df_postal.iloc[:, 0].astype(str).str.strip().str.upper()
@@ -101,12 +100,15 @@ if st.button("Start to process data", type="primary"):
             postal_mapping = dict(zip(first_col, second_col))
 
             # --- BƯỚC 3: XỬ LÝ ATF FILE VÀ LỌC INVOICE (65%) ---
-            progress_bar.progress(65, text="Data processing...")
+            progress_bar.progress(65, text="Đang quét hàng vạn dòng ATF bằng Vectorization...")
             
             df_atf = pd.read_excel(atf_file)
 
             if 'Invoice Number' in df_atf.columns:
-                df_atf['Original Invoice'] = df_atf['Invoice Number'].apply(clean_invoice)
+                # TỐI ƯU 2: Xử lý chuỗi nguyên 1 cột cùng lúc, cực nhanh
+                df_atf['Original Invoice'] = clean_invoice_series(df_atf['Invoice Number'])
+                
+                # TỐI ƯU 3: Lọc dữ liệu TRƯỚC, rồi mới tính toán Priority Rank (chỉ tính trên tập nhỏ)
                 matched_atf = df_atf[df_atf['Original Invoice'].isin(corr_original_invs)].copy()
                 
                 matched_atf['Priority_Rank'] = matched_atf['Invoice Number'].apply(get_invoice_rank)
@@ -118,7 +120,7 @@ if st.button("Start to process data", type="primary"):
                 df_rev = latest_invoices_df.copy()
                 
                 # --- BƯỚC 4: UPDATE DATA COR, REV, UPLOAD (85%) ---
-                progress_bar.progress(85, text="Analyzing and creating the correction file...")
+                progress_bar.progress(85, text="Đang tạo file kết quả COR, REV, Upload...")
                 
                 # UPDATE SHEET "COR"
                 if 'Transaction Number' in df_cor.columns:
@@ -132,7 +134,7 @@ if st.button("Start to process data", type="primary"):
                     mapped_postals = mapped_reps.dropna().map(postal_mapping)
                     df_cor['Other Postal Code'] = mapped_postals.combine_first(df_cor['Other Postal Code'])
                 
-                # CẬP NHẬT CỘT COMMENTS TRONG SHEET COR VỚI INPUT CỦA USER
+                # Cập nhật Comments dựa trên Input
                 comment_value = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
                 df_cor['Comments'] = comment_value
 
@@ -149,7 +151,6 @@ if st.button("Start to process data", type="primary"):
                     if col in df_rev.columns:
                         df_rev[col] = pd.to_numeric(df_rev[col], errors='coerce') * -1
 
-                # Dọn dẹp cột phụ
                 df_cor = df_cor.drop(columns=['Original Invoice'])
                 df_rev = df_rev.drop(columns=['Original Invoice'])
 
@@ -167,23 +168,23 @@ if st.button("Start to process data", type="primary"):
                 
                 output_buffer.seek(0)
                 
-                # Hoàn tất tiến trình
                 progress_bar.progress(100, text="Hoàn tất quy trình xử lý!")
                 
-                st.success("✅ Data processing completed.")
+                st.success("✅ Xử lý thành công siêu tốc! Nhấn nút bên dưới để tải file kết quả.")
+                st.info(f"📊 Thống kê nhanh: Đã trích xuất {len(latest_invoices_df)} hóa đơn hợp lệ.")
                 
                 st.download_button(
-                    label="📥 Download the correction file",
+                    label="📥 Tải xuống Matched_Latest_Invoices_Result.xlsx",
                     data=output_buffer,
-                    file_name="Correction file.xlsx",
+                    file_name="Matched_Latest_Invoices_Result.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary"
                 )
 
             else:
-                st.error("❌ Error: Can't fine the Invoice Number in the ATF.")
+                st.error("❌ Lỗi: Không tìm thấy cột 'Invoice Number' trong file ATF.")
                 progress_bar.empty()
 
         except Exception as e:
-            st.error(f"❌ Data processing error: {e}")
+            st.error(f"❌ Đã xảy ra lỗi trong quá trình xử lý: {e}")
             progress_bar.empty()
