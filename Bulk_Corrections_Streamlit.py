@@ -152,7 +152,7 @@ if st.button("Start Processing", type="primary"):
                 # Lưu file dưới dạng bộ nhớ đệm (Bytes) vào Session State
                 st.session_state.excel_data = excel_buffer.getvalue()
                 st.session_state.csv_data = df_upload.to_csv(index=False).encode('utf-8')
-                st.session_state.success_msg = f"✅ Xử lý thành công! Đã trích xuất {len(latest_invoices_df)} hóa đơn hợp lệ (Tổng cộng {len(df_upload)} dòng)."
+                st.session_state.success_msg = f"✅ Data Processing is completed."
                 st.session_state.processing_done = True
                 
                 progress_bar.progress(100, text="Data Processing is completed!")
