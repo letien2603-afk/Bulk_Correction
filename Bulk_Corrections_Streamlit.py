@@ -50,9 +50,9 @@ postal_ref_file = st.file_uploader("3. Postal Codes Ref File", type=['xlsx', 'xl
 
 if st.button("Start to process", type="primary"):
     if not correction_file or not atf_file or not postal_ref_file:
-        st.warning("⚠️ Vui lòng tải lên đầy đủ cả 3 tệp trước khi xử lý!")
+        st.warning("⚠️ Upload all required documents before processing")
     else:
-        with st.spinner("⏳ Đang xử lý dữ liệu, vui lòng đợi trong giây lát..."):
+        with st.spinner("⏳ Processing data, please wait for a few seconds..."):
             try:
                 # --- BƯỚC 3a: XỬ LÝ CORRECTION FILE ---
                 corr_xls = pd.ExcelFile(correction_file)
@@ -137,19 +137,18 @@ if st.button("Start to process", type="primary"):
                     
                     output_buffer.seek(0)
                     
-                    st.success("✅ Xử lý thành công! Nhấn nút bên dưới để tải file kết quả.")
-                    st.info(f"📊 Thống kê nhanh: Đã xử lý {len(latest_invoices_df)} hóa đơn hợp lệ.")
+                    st.success("✅ Data processing is completed! Click the button below to download the upload file")
                     
                     st.download_button(
-                        label="📥 Tải xuống Matched_Latest_Invoices_Result.xlsx",
+                        label="📥 Download the Upload file",
                         data=output_buffer,
-                        file_name="Matched_Latest_Invoices_Result.xlsx",
+                        file_name="Upload file.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary"
                     )
 
                 else:
-                    st.error("❌ Lỗi: Không tìm thấy cột 'Invoice Number' trong file ATF.")
+                    st.error("❌ Lỗi: Can't find the Invoice Number in the ATF")
 
             except Exception as e:
-                st.error(f"❌ Đã xảy ra lỗi trong quá trình xử lý: {e}")
+                st.error(f"❌ Data processing error: {e}")
