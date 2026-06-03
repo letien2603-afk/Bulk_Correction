@@ -40,13 +40,13 @@ def update_suffix(val, target_suffix):
 
 # --- GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
-st.title("Chương Trình Xử Lý Invoice (COR/REV)")
-st.write("Vui lòng tải lên 3 tệp dữ liệu cần thiết bên dưới để hệ thống xử lý.")
+st.title("Bulk Corrections-Eric Hayes")
+st.write("Upload required documents below.")
 
 # Upload Files (ĐÃ BỔ SUNG ĐỊNH DẠNG xlsb)
-correction_file = st.file_uploader("1. Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("2. Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
-postal_ref_file = st.file_uploader("3. Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+correction_file = st.file_uploader("1. Eric Haye's File", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("2. ATF File", type=['xlsx', 'xls', 'xlsb'])
+postal_ref_file = st.file_uploader("3. Postal Codes Ref File", type=['xlsx', 'xls', 'xlsb'])
 
 if st.button("Bắt Đầu Xử Lý", type="primary"):
     if not correction_file or not atf_file or not postal_ref_file:
