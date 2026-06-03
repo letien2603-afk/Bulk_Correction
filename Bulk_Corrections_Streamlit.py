@@ -101,7 +101,7 @@ if st.button("Start to process data", type="primary"):
             postal_mapping = dict(zip(first_col, second_col))
 
             # --- BƯỚC 3: XỬ LÝ ATF FILE VÀ LỌC INVOICE (65%) ---
-            progress_bar.progress(65, text="Đang xử lý 'ATF File' và trích xuất hóa đơn mới nhất...")
+            progress_bar.progress(65, text="Data processing...")
             
             df_atf = pd.read_excel(atf_file)
 
@@ -175,7 +175,7 @@ if st.button("Start to process data", type="primary"):
                 st.download_button(
                     label="📥 Download the correction file",
                     data=output_buffer,
-                    file_name="Matched_Latest_Invoices_Result.xlsx",
+                    file_name="Correction file.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary"
                 )
