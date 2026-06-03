@@ -40,39 +40,39 @@ def update_suffix(val, target_suffix):
 
 # --- GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
-st.title("Chương Trình Xử Lý Invoice (COR/REV)")
+st.title("Bulk Corrections - Eric Hayes")
 
 # --- 1. NHẬP THÔNG TIN CASE ---
-st.subheader("1. Thông tin Case (Bắt buộc)")
+st.subheader("1. Case Number and Impacted Month")
 col1, col2 = st.columns(2)
 with col1:
-    case_number = st.text_input("Nhập Case Number", placeholder="VD: 2605-10535218")
+    case_number = st.text_input("Case Number", placeholder="VD: 2605-10535218")
 with col2:
-    impacted_month = st.text_input("Nhập Impacted Month", placeholder="VD: April")
+    impacted_month = st.text_input("Impacted Month", placeholder="VD: April")
 
 # --- 2. UPLOAD TỆP DỮ LIỆU ---
-st.subheader("2. Tải lên dữ liệu")
-st.write("Vui lòng tải lên 3 tệp dữ liệu cần thiết bên dưới để hệ thống xử lý.")
+st.subheader("2. Upload section")
+st.write("Upload 3 required documents.")
 
-correction_file = st.file_uploader("Tải lên 'Requested Correction File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("Tải lên 'ATF File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
-postal_ref_file = st.file_uploader("Tải lên 'Postal Codes Ref File' (Excel)", type=['xlsx', 'xls', 'xlsb'])
+correction_file = st.file_uploader("Eric Hayes' file", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("ATF file", type=['xlsx', 'xls', 'xlsb'])
+postal_ref_file = st.file_uploader("Postal Code Ref file", type=['xlsx', 'xls', 'xlsb'])
 
 # --- 3. XỬ LÝ DỮ LIỆU ---
-if st.button("Bắt Đầu Xử Lý", type="primary"):
+if st.button("Start to process data", type="primary"):
     # Kiểm tra người dùng đã nhập đủ Case Number và Impacted Month chưa
     if not case_number or not impacted_month:
-        st.warning("⚠️ Vui lòng nhập đầy đủ 'Case Number' và 'Impacted Month' trước khi xử lý!")
+        st.warning("⚠️ You must enter a case number and Impacted Month!")
     elif not correction_file or not atf_file or not postal_ref_file:
-        st.warning("⚠️ Vui lòng tải lên đầy đủ cả 3 tệp trước khi xử lý!")
+        st.warning("⚠️ You must upload 3 required documents!")
     else:
         # Khởi tạo thanh tiến trình
-        progress_text = "Khởi động quy trình..."
+        progress_text = "Start processing..."
         progress_bar = st.progress(0, text=progress_text)
         
         try:
             # --- BƯỚC 1: XỬ LÝ CORRECTION FILE (20%) ---
-            progress_bar.progress(20, text="Đang đọc và phân tích 'Requested Correction File'...")
+            progress_bar.progress(20, text="Analyzing 'Requested Correction File'...")
             
             corr_xls = pd.ExcelFile(correction_file)
             corr_original_invs = set()
@@ -118,7 +118,7 @@ if st.button("Bắt Đầu Xử Lý", type="primary"):
                 df_rev = latest_invoices_df.copy()
                 
                 # --- BƯỚC 4: UPDATE DATA COR, REV, UPLOAD (85%) ---
-                progress_bar.progress(85, text="Đang tính toán các chỉ số và tạo dữ liệu cho COR, REV, Upload...")
+                progress_bar.progress(85, text="Analyzing and creating the correction file...")
                 
                 # UPDATE SHEET "COR"
                 if 'Transaction Number' in df_cor.columns:
@@ -170,11 +170,10 @@ if st.button("Bắt Đầu Xử Lý", type="primary"):
                 # Hoàn tất tiến trình
                 progress_bar.progress(100, text="Hoàn tất quy trình xử lý!")
                 
-                st.success("✅ Xử lý thành công! Nhấn nút bên dưới để tải file kết quả.")
-                st.info(f"📊 Thống kê nhanh: Đã xử lý {len(latest_invoices_df)} hóa đơn hợp lệ.")
+                st.success("✅ Data processing completed.")
                 
                 st.download_button(
-                    label="📥 Tải xuống Matched_Latest_Invoices_Result.xlsx",
+                    label="📥 Download the correction file",
                     data=output_buffer,
                     file_name="Matched_Latest_Invoices_Result.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -182,9 +181,9 @@ if st.button("Bắt Đầu Xử Lý", type="primary"):
                 )
 
             else:
-                st.error("❌ Lỗi: Không tìm thấy cột 'Invoice Number' trong file ATF.")
+                st.error("❌ Error: Can't fine the Invoice Number in the ATF.")
                 progress_bar.empty()
 
         except Exception as e:
-            st.error(f"❌ Đã xảy ra lỗi trong quá trình xử lý: {e}")
+            st.error(f"❌ Data processing error: {e}")
             progress_bar.empty()
