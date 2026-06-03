@@ -55,7 +55,7 @@ with col2:
 # --- 2. UPLOAD TỆP DỮ LIỆU ---
 st.subheader("2. Upload section")
 correction_file = st.file_uploader("Requested Correction File", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("Tải lên 'ATF File", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("ATF File", type=['xlsx', 'xls', 'xlsb'])
 postal_ref_file = st.file_uploader("Postal Codes Ref File", type=['xlsx', 'xls', 'xlsb'])
 
 # --- 3. XỬ LÝ DỮ LIỆU ---
@@ -92,7 +92,7 @@ if st.button("Data Processing", type="primary"):
                         rep_mapping[orig_inv] = sales_rep.upper()
 
             # --- BƯỚC 2: ĐỌC POSTAL CODES REF FILE (40%) ---
-            progress_bar.progress(40, text="Đang ánh xạ mã bưu điện...")
+            progress_bar.progress(40, text="Analyzing Postal Codes file...")
             
             df_postal = pd.read_excel(postal_ref_file)
             first_col = df_postal.iloc[:, 0].astype(str).str.strip().str.upper()
@@ -100,7 +100,7 @@ if st.button("Data Processing", type="primary"):
             postal_mapping = dict(zip(first_col, second_col))
 
             # --- BƯỚC 3: XỬ LÝ ATF FILE VÀ LỌC INVOICE (65%) ---
-            progress_bar.progress(65, text="Đang quét hàng vạn dòng ATF bằng Vectorization...")
+            progress_bar.progress(65, text="Data Analyzing...")
             
             df_atf = pd.read_excel(atf_file)
 
