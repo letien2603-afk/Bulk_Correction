@@ -48,7 +48,7 @@ correction_file = st.file_uploader("1. Eric Haye's File", type=['xlsx', 'xls', '
 atf_file = st.file_uploader("2. ATF File", type=['xlsx', 'xls', 'xlsb'])
 postal_ref_file = st.file_uploader("3. Postal Codes Ref File", type=['xlsx', 'xls', 'xlsb'])
 
-if st.button("Bắt Đầu Xử Lý", type="primary"):
+if st.button("Start to process", type="primary"):
     if not correction_file or not atf_file or not postal_ref_file:
         st.warning("⚠️ Vui lòng tải lên đầy đủ cả 3 tệp trước khi xử lý!")
     else:
