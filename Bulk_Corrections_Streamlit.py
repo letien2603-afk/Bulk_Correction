@@ -4,35 +4,48 @@ import re
 from io import BytesIO
 
 # --- HÀM XỬ LÝ CHUỖI SIÊU TỐC (VECTORIZED) ---
-def clean_invoice_series(series):
-    s = series.astype(str).str.strip()
-    s = s.str.replace(r'\.0$', '', regex=True)
-    base = s.str.replace(r'[- ]*(COR|REV)\d*$', '', regex=True, flags=re.IGNORECASE)
-    cleaned = base.str.lstrip('0')
+def clean_invoice_series(series): 
+    s = series.astype(str).str.strip() 
+    s = s.str.replace(r'\.0$', '', regex=True) 
+    # [CẬP NHẬT]: Dùng [\s\-]* để quét sạch mọi dấu gạch ngang (bao gồm --COR)
+    base = s.str.replace(r'[\s\-]*(COR|REV)\d*$', '', regex=True, flags=re.IGNORECASE) 
+    # Xoá số 0 ở đầu (Giải quyết triệt để lỗi mất số 0 leading zero giữa 2 file)
+    cleaned = base.str.lstrip('0') 
     return cleaned.where(cleaned != '', base).replace('nan', pd.NA)
 
-def get_invoice_rank(inv):
-    if pd.isna(inv): return -1
-    inv_str = str(inv).upper()
-    match = re.search(r'[- ]*(COR|REV)(\d*)$', inv_str)
-    if not match: return 0 
-    type_str, num_str = match.group(1), match.group(2)
-    num = int(num_str) if num_str else 1
-    type_score = 2 if type_str == 'COR' else 1
-    return (num * 10) + type_score
-
-def update_suffix(val, target_suffix):
-    if pd.isna(val): return val
-    val_str = str(val).strip()
-    match = re.search(r'[- ]*(COR|REV)(\d*)$', val_str, flags=re.IGNORECASE)
+def get_invoice_rank(inv): 
+    if pd.isna(inv): 
+        return (0, 0, 0) 
+    inv_str = str(inv).upper().strip() 
+    # [CẬP NHẬT]: Tách phần dấu gạch ngang ra để đếm số lượng
+    match = re.search(r'([\s\-]*)(COR|REV)(\d*)$', inv_str) 
+    if not match: 
+        return (0, 0, 0) 
     
+    separator = match.group(1)
+    type_str = match.group(2)
+    num_str = match.group(3)
+    
+    type_val = 2 if type_str == 'COR' else 1
+    num_val = int(num_str) if num_str else 1
+    dash_count = separator.count('-') 
+    
+    # Trả về bộ 3 giá trị (Số đuôi, Loại, Số lượng gạch ngang)
+    return (num_val, type_val, dash_count)
+
+def update_suffix(val, target_suffix): 
+    if pd.isna(val): 
+        return val 
+    val_str = str(val).strip() 
+    match = re.search(r'(?i)(.*?)(?:[\s\-]*)(COR|REV)(\d*)$', val_str) 
     if match:
-        current_num_str = match.group(2)
-        base_str = val_str[:match.start()]
-        num = int(current_num_str) if current_num_str else 1
-        return f"{base_str}-{target_suffix}{num + 1}"
+        prefix = match.group(1).rstrip('- ')
+        num_str = match.group(3)
+        current_num = int(num_str) if num_str else 1
+        next_num = current_num + 1
+        return f"{prefix}-{target_suffix}{next_num}"
     else:
-        return f"{val_str}-{target_suffix}"
+        return f"{val_str.rstrip('- ')}-{target_suffix}"
 
 # --- GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Invoice Processing Tool", layout="centered")
@@ -94,6 +107,7 @@ if st.button("Start Processing", type="primary"):
             second_col = df_postal.iloc[:, 1].astype(str).str.strip()
             postal_mapping = dict(zip(first_col, second_col))
 
+-------------------------------
             # Bước 3
             progress_bar.progress(65, text="Scanning ATF file...")
             df_atf = pd.read_excel(atf_file)
@@ -103,12 +117,24 @@ if st.button("Start Processing", type="primary"):
                 matched_atf = df_atf[df_atf['Original Invoice'].isin(corr_original_invs)].copy()
                 
                 matched_atf['Priority_Rank'] = matched_atf['Invoice Number'].apply(get_invoice_rank)
-                latest_invoices_df = matched_atf.sort_values('Priority_Rank', ascending=False) \
-                                                .drop_duplicates(subset=['Original Invoice'], keep='first')
+                
+                # [QUAN TRỌNG]: Bỏ hàm drop_duplicates và dùng Temp_Amount để gom nhóm trị tuyệt đối
+                # Việc này giúp giữ LẠI ĐÚNG VÀ ĐỦ 13 dòng màu vàng cho invoice 0043905960
+                if 'Transaction Amount' in matched_atf.columns:
+                    matched_atf['Temp_Amount'] = pd.to_numeric(matched_atf['Transaction Amount'], errors='coerce').abs()
+                    max_ranks = matched_atf.groupby(['Original Invoice', 'Temp_Amount'], dropna=False)['Priority_Rank'].transform('max')
+                    matched_atf.drop(columns=['Temp_Amount'], inplace=True)
+                else:
+                    max_ranks = matched_atf.groupby('Original Invoice')['Priority_Rank'].transform('max')
+                    
+                # Lọc ra tất cả các dòng đạt thứ hạng cao nhất (thay vì chỉ lấy dòng đầu tiên)
+                latest_invoices_df = matched_atf[matched_atf['Priority_Rank'] == max_ranks].copy()
                 latest_invoices_df = latest_invoices_df.drop(columns=['Priority_Rank'])
                 
                 df_cor = latest_invoices_df.copy()
                 df_rev = latest_invoices_df.copy()
+
+----------------------
                 
                 # Bước 4
                 progress_bar.progress(85, text="Creating the correction file...")
