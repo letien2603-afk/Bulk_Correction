@@ -151,6 +151,11 @@ if st.button("Start Processing", type="primary"):
                     df_cor['Other Postal Code'] = mapped_postals.combine_first(df_cor['Other Postal Code'])
                 
                 df_cor['Comments'] = f"{case_number.strip()} Eric Hayes bulk ({impacted_month.strip()} Impact)"
+                
+                if 'Comments' in df_cor.columns:
+                    df_rev['Comments'] = df_cor['Comments']
+                elif 'Comment' in df_cor.columns:
+                    df_rev['Comment'] = df_cor['Comment']
 
                 if 'Transaction Number' in df_rev.columns:
                     df_rev['Transaction Number'] = df_rev['Transaction Number'].apply(lambda x: update_suffix(x, 'REV'))
