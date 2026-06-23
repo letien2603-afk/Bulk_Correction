@@ -107,7 +107,7 @@ if st.button("Start Processing", type="primary"):
             second_col = df_postal.iloc[:, 1].astype(str).str.strip()
             postal_mapping = dict(zip(first_col, second_col))
 
--------------------------------
+#-------------------------------
             # Bước 3
             progress_bar.progress(65, text="Scanning ATF file...")
             df_atf = pd.read_excel(atf_file)
@@ -134,7 +134,7 @@ if st.button("Start Processing", type="primary"):
                 df_cor = latest_invoices_df.copy()
                 df_rev = latest_invoices_df.copy()
 
-----------------------
+#----------------------
                 
                 # Bước 4
                 progress_bar.progress(85, text="Creating the correction file...")
