@@ -121,7 +121,7 @@ if st.button("Start Processing", type="primary"):
                 # [QUAN TRỌNG]: Bỏ hàm drop_duplicates và dùng Temp_Amount để gom nhóm trị tuyệt đối
                 # Việc này giúp giữ LẠI ĐÚNG VÀ ĐỦ 13 dòng màu vàng cho invoice 0043905960
                 if 'Transaction Amount' in matched_atf.columns:
-                    matched_atf['Temp_Amount'] = pd.to_numeric(matched_atf['Transaction Amount'], errors='coerce').abs()
+                    matched_atf['Temp_Amount'] = pd.to_numeric(matched_atf['Transaction Amount'], errors='coerce').round(2).abs()
                     max_ranks = matched_atf.groupby(['Original Invoice', 'Temp_Amount'], dropna=False)['Priority_Rank'].transform('max')
                     matched_atf.drop(columns=['Temp_Amount'], inplace=True)
                 else:
