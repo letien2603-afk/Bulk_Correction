@@ -111,7 +111,7 @@ if st.button("Start Processing", type="primary"):
             # Bước 3
             progress_bar.progress(65, text="Scanning ATF file...")
             df_atf = pd.read_excel(atf_file)
-			df_atf = df_atf[df_atf["Process Code"].astype(str).str.strip().str.upper() == "CCREC"].copy()
+
             if 'Invoice Number' in df_atf.columns:
                 df_atf['Original Invoice'] = clean_invoice_series(df_atf['Invoice Number'])
                 matched_atf = df_atf[df_atf['Original Invoice'].isin(corr_original_invs)].copy()
