@@ -69,7 +69,7 @@ with col2:
 # --- 2. UPLOAD TỆP DỮ LIỆU ---
 st.subheader("2. Upload required documents")
 correction_file = st.file_uploader("Requested Correction File", type=['xlsx', 'xls', 'xlsb'])
-atf_file = st.file_uploader("ATF File", type=['xlsx', 'xls', 'xlsb'])
+atf_file = st.file_uploader("ATF File", type=['parquet', 'pq'])
 postal_ref_file = st.file_uploader("Postal Codes Ref File", type=['xlsx', 'xls', 'xlsb'])
 
 # --- 3. XỬ LÝ DỮ LIỆU ---
@@ -110,7 +110,7 @@ if st.button("Start Processing", type="primary"):
 #-------------------------------
             # Bước 3
             progress_bar.progress(65, text="Scanning ATF file...")
-            df_atf = pd.read_excel(atf_file)
+            df_atf = pd.read_parquet(atf_file)
             df_atf = df_atf[df_atf["Process Code"].astype(str).str.strip().str.upper() == "CCREC"].copy()
 
             if 'Invoice Number' in df_atf.columns:
